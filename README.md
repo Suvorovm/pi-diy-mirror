@@ -30,7 +30,16 @@ Retain:  не нужен
 
 ## Команды
 
-### 1. Установить будильник
+| # | Топик               | Описание                         |
+|---|---------------------|----------------------------------|
+| 1 | `alarm/set`         | Установить будильник             |
+| 2 | `alarm/clear`       | Удалить будильник                |
+| 3 | `location/set`      | Изменить местоположение          |
+| 4 | `device/restart`    | Перезагрузить устройство         |
+
+---
+
+### 1. Установить будильник — `alarm/set`
 
 **Топик:** `mirror/alarm/set`
 
@@ -50,29 +59,82 @@ Retain:  не нужен
 **Что происходит:**
 - Будильник сохраняется в `settings.json`
 - На экране появляется время будильника
-- В `alarm_check_seconds` секунд (по умолчанию 60) `AlarmCheckRoutine` сверит время — если совпадёт, покажет уведомление
+- Каждые `alarm_check_seconds` (60 сек) `AlarmCheckRoutine` сверяет время — при совпадении показывает уведомление
 
-**Пример — будильник на 7:30:**
+**Примеры:**
 ```json
-{"hour": 7, "minute": 30}
+{"hour": 6, "minute": 0}    // 06:00
+{"hour": 7, "minute": 30}   // 07:30
+{"hour": 22, "minute": 45}  // 22:45
 ```
 
 ---
 
-### 2. Перезагрузить устройство
+### 2. Удалить будильник — `alarm/clear`
+
+**Топик:** `mirror/alarm/clear`
+
+**Payload:** пустой объект
+```json
+{}
+```
+
+**Что происходит:**
+- Будильник удаляется из `settings.json`
+- На экране пропадает строка с будильником
+- `AlarmCheckRoutine` перестаёт проверять время до следующего `alarm/set`
+
+---
+
+### 3. Изменить местоположение — `location/set`
+
+**Топик:** `mirror/location/set`
+
+**Payload:**
+```json
+{
+  "latitude": 59.93,
+  "longitude": 30.32,
+  "city": "Санкт-Петербург"
+}
+```
+
+| Поле        | Тип      | Допустимые значения | Обязателен |
+|-------------|----------|---------------------|-----------|
+| `latitude`  | `float`  | -90 – 90            | Да        |
+| `longitude` | `float`  | -180 – 180          | Да        |
+| `city`      | `string` | любое название      | Нет       |
+
+**Что происходит:**
+- Координаты сохраняются в `settings.json`
+- На экране обновляется строка с местоположением
+- Следующий тик `WeatherRoutine` запросит погоду для новых координат
+
+> **Приоритет источников локации:**  
+> Сохранённые координаты (`settings.json`) > авто-определение по IP > дефолт из `config.json`
+
+**Примеры:**
+```json
+{"latitude": 55.75, "longitude": 37.62, "city": "Москва"}
+{"latitude": 59.93, "longitude": 30.32, "city": "Санкт-Петербург"}
+{"latitude": 48.85, "longitude": 2.35,  "city": "Париж"}
+```
+
+---
+
+### 4. Перезагрузить устройство — `device/restart`
 
 **Топик:** `mirror/device/restart`
 
-**Payload:** пустой JSON-объект (или вообще пустая строка)
+**Payload:** пустой объект
 ```json
 {}
 ```
 
 **Что происходит:**
 - Pi выполняет `sudo reboot`
-- Требуется настройка sudoers (см. ниже)
 
-> ⚠️ **Для работы перезагрузки** нужно добавить на Pi:
+> ⚠️ **Требуется настройка sudoers на Pi:**
 > ```bash
 > echo "pi ALL=(ALL) NOPASSWD: /sbin/reboot" | sudo tee /etc/sudoers.d/smartmirror
 > ```
@@ -83,12 +145,13 @@ Retain:  не нужен
 
 Эти данные обновляются автоматически по расписанию — команд отправлять не нужно.
 
-| Данные       | Интервал обновления              | Источник                  |
-|--------------|----------------------------------|---------------------------|
-| Текущее время| `intervals.time_seconds` (60 с)  | Системные часы Pi         |
-| Погода       | `weather.refresh_interval_seconds` (300 с) | Open-Meteo API  |
-| Фраза        | `intervals.phrase_seconds` (1800 с) | `data/phrases.json`   |
-| Будильник    | Проверка каждые `alarm_check_seconds` (60 с) | `settings.json` |
+| Данные            | Интервал обновления                          | Источник                     |
+|-------------------|----------------------------------------------|------------------------------|
+| Текущее время     | `intervals.time_seconds` (60 с)              | Системные часы Pi            |
+| Местоположение    | Определяется **один раз при старте** по IP   | ip-api.com                   |
+| Погода            | `weather.refresh_interval_seconds` (300 с)   | Open-Meteo API               |
+| Фраза             | `intervals.phrase_seconds` (1800 с)          | `data/phrases.json`          |
+| Проверка будильника | `intervals.alarm_check_seconds` (60 с)     | `settings.json`              |
 
 ---
 
@@ -111,7 +174,9 @@ Retain:  не нужен
 
 ---
 
-## Настройка координат для погоды
+## Настройка координат по умолчанию
+
+Используются только если локация не была определена по IP и не задана командой `location/set`.
 
 ```json
 {
@@ -122,7 +187,6 @@ Retain:  не нужен
 }
 ```
 
-Широта и долгота города. Сейчас стоит Москва.  
 Координаты можно найти на [latlong.net](https://www.latlong.net/).
 
 ---
@@ -189,20 +253,6 @@ publish.single(
 )
 ```
 
-**JavaScript / Node.js (mqtt):**
-```js
-const mqtt = require('mqtt');
-const client = mqtt.connect('mqtt://<IP_Pi>:1883');
-
-client.on('connect', () => {
-    client.publish(
-        'mirror/alarm/set',
-        JSON.stringify({ hour: 7, minute: 30}),
-        () => client.end()
-    );
-});
-```
-
 **Dart / Flutter (mqtt_client):**
 ```dart
 final payload = jsonEncode({'hour': 7, 'minute': 30});
@@ -210,11 +260,65 @@ final builder = MqttClientPayloadBuilder()..addString(payload);
 client.publishMessage('mirror/alarm/set', MqttQos.atLeastOnce, builder.payload!);
 ```
 
-**Варианты будильника:**
-```json
-{"hour": 6, "minute": 0}    // 06:00
-{"hour": 7, "minute": 30}   // 07:30
-{"hour": 22, "minute": 45}  // 22:45
+---
+
+### alarm/clear — удалить будильник
+
+**mosquitto (терминал):**
+```bash
+mosquitto_pub -h <IP_Pi> -p 1883 -t "mirror/alarm/clear" -m '{}'
+```
+
+**Python (paho-mqtt):**
+```python
+import paho.mqtt.publish as publish
+
+publish.single(
+    topic="mirror/alarm/clear",
+    payload="{}",
+    hostname="<IP_Pi>",
+    port=1883,
+)
+```
+
+**Dart / Flutter (mqtt_client):**
+```dart
+final builder = MqttClientPayloadBuilder()..addString('{}');
+client.publishMessage('mirror/alarm/clear', MqttQos.atLeastOnce, builder.payload!);
+```
+
+---
+
+### location/set — изменить местоположение
+
+**mosquitto (терминал):**
+```bash
+mosquitto_pub -h <IP_Pi> -p 1883 -t "mirror/location/set" \
+  -m '{"latitude": 59.93, "longitude": 30.32, "city": "Санкт-Петербург"}'
+```
+
+**Python (paho-mqtt):**
+```python
+import paho.mqtt.publish as publish
+import json
+
+publish.single(
+    topic="mirror/location/set",
+    payload=json.dumps({"latitude": 59.93, "longitude": 30.32, "city": "Санкт-Петербург"}),
+    hostname="<IP_Pi>",
+    port=1883,
+)
+```
+
+**Dart / Flutter (mqtt_client):**
+```dart
+final payload = jsonEncode({
+  'latitude': 59.93,
+  'longitude': 30.32,
+  'city': 'Санкт-Петербург',
+});
+final builder = MqttClientPayloadBuilder()..addString(payload);
+client.publishMessage('mirror/location/set', MqttQos.atLeastOnce, builder.payload!);
 ```
 
 ---
@@ -236,16 +340,6 @@ publish.single(
     hostname="<IP_Pi>",
     port=1883,
 )
-```
-
-**JavaScript / Node.js (mqtt):**
-```js
-const mqtt = require('mqtt');
-const client = mqtt.connect('mqtt://<IP_Pi>:1883');
-
-client.on('connect', () => {
-    client.publish('mirror/device/restart', '{}', () => client.end());
-});
 ```
 
 **Dart / Flutter (mqtt_client):**
@@ -271,8 +365,13 @@ echo "Устанавливаем будильник на 7:30..."
 mosquitto_pub -h $PI_IP -t "mirror/alarm/set" -m '{"hour": 7, "minute": 30}'
 sleep 1
 
-echo "Меняем будильник на 8:00..."
-mosquitto_pub -h $PI_IP -t "mirror/alarm/set" -m '{"hour": 8, "minute": 0}'
+echo "Меняем местоположение на СПб..."
+mosquitto_pub -h $PI_IP -t "mirror/location/set" \
+  -m '{"latitude": 59.93, "longitude": 30.32, "city": "Санкт-Петербург"}'
+sleep 1
+
+echo "Удаляем будильник..."
+mosquitto_pub -h $PI_IP -t "mirror/alarm/clear" -m '{}'
 sleep 1
 
 echo "Перезагружаем Pi..."

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import requests
 
-from smart_mirror.core.config import WeatherConfig
+from smart_mirror.data.location import LocationData
 from smart_mirror.data.weather import WeatherData
 
-# WMO Weather interpretation codes → human-readable descriptions
+# WMO Weather interpretation codes → human-readable descriptions (Russian)
 _WMO_DESCRIPTIONS: dict[int, str] = {
     0: "Ясно",
     1: "Преимущественно ясно", 2: "Переменная облачность", 3: "Пасмурно",
@@ -23,13 +23,11 @@ _API_URL = "https://api.open-meteo.com/v1/forecast"
 
 
 class WeatherFetcher:
-    def __init__(self, config: WeatherConfig) -> None:
-        self._config = config
-
-    def fetch(self) -> WeatherData:
+    def fetch(self, location: LocationData) -> WeatherData:
+        """Fetch current weather for the given location."""
         params = {
-            "latitude": self._config.latitude,
-            "longitude": self._config.longitude,
+            "latitude": location.latitude,
+            "longitude": location.longitude,
             "current": "temperature_2m,weather_code,wind_speed_10m",
             "wind_speed_unit": "kmh",
         }

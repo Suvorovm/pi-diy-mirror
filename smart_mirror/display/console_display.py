@@ -5,6 +5,7 @@ import sys
 import threading
 
 from smart_mirror.data.alarm import AlarmData
+from smart_mirror.data.location import LocationData
 from smart_mirror.data.weather import WeatherData
 from smart_mirror.display.base import DisplayAdapter
 from smart_mirror.display.screen_state import ScreenState
@@ -38,6 +39,11 @@ class ConsoleDisplay(DisplayAdapter):
             self._state.alarm = alarm
         self.render()
 
+    def update_location(self, location: LocationData | None) -> None:
+        with self._lock:
+            self._state.location = location
+        self.render()
+
     def show_alarm_triggered(self) -> None:
         with self._lock:
             self._state.alarm_triggered = True
@@ -52,6 +58,11 @@ class ConsoleDisplay(DisplayAdapter):
             _SEPARATOR,
             f"  Время:    {state.current_time or '—'}",
         ]
+
+        if state.location:
+            lines += [
+                f"  Место:    {state.location}",
+            ]
 
         if state.weather:
             w = state.weather

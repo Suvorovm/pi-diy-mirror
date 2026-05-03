@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from smart_mirror.data.alarm import AlarmData
+from smart_mirror.data.location import LocationData
 from smart_mirror.data.weather import WeatherData
 
 
@@ -18,6 +19,9 @@ class DisplayAdapter(ABC):
 
     @abstractmethod
     def update_alarm(self, alarm: AlarmData | None) -> None: ...
+
+    @abstractmethod
+    def update_location(self, location: LocationData | None) -> None: ...
 
     @abstractmethod
     def show_alarm_triggered(self) -> None: ...

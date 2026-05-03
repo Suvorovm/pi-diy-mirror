@@ -1,6 +1,7 @@
 {
-  "alarm": {
-    "hour": 8,
-    "minute": 0
+  "location": {
+    "latitude": 55.75,
+    "longitude": 37.62,
+    "city": "Москва"
   }
 }
