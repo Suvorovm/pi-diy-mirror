@@ -1,0 +1,18 @@
+{
+  "mqtt": {
+    "broker_host": "localhost",
+    "broker_port": 1883,
+    "topic_prefix": "mirror/"
+  },
+  "weather": {
+    "latitude": 55.75,
+    "longitude": 37.62,
+    "refresh_interval_seconds": 300
+  },
+  "intervals": {
+    "time_seconds": 60,
+    "phrase_seconds": 1800,
+    "alarm_check_seconds": 60
+  },
+  "phrases_file": "smart_mirror/data/phrases.json"
+}
