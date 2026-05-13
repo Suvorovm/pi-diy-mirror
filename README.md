@@ -1,4 +1,233 @@
-# Smart Mirror — MQTT API
+# Smart Mirror
+
+Приложение умного зеркала для **Raspberry Pi Zero 2W**.  
+Отображает время, погоду и фразы дня. Управляется с телефона по MQTT.
+
+---
+
+## Содержание
+
+1. [Требования](#требования)
+2. [Установка на Raspberry Pi](#установка-на-raspberry-pi)
+3. [Первый запуск](#первый-запуск)
+4. [Автозапуск при старте системы](#автозапуск-при-старте-системы)
+5. [Тест железа](#тест-железа)
+6. [Структура файлов](#структура-файлов)
+7. [MQTT API](#mqtt-api)
+
+---
+
+## Требования
+
+| Компонент         | Версия / описание                     |
+|-------------------|---------------------------------------|
+| Raspberry Pi OS   | Bookworm (64-bit) или Bullseye        |
+| Python            | 3.11 или новее (`python3 --version`)  |
+| MQTT-брокер       | Mosquitto на самом Pi или в сети      |
+| Интернет          | Нужен для погоды и авто-локации       |
+
+---
+
+## Установка на Raspberry Pi
+
+### 1. Клонируй репозиторий
+
+```bash
+git clone <url-репозитория> ~/smart-mirror
+cd ~/smart-mirror
+```
+
+### 2. Установи зависимости
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Установи и запусти MQTT-брокер (Mosquitto)
+
+```bash
+sudo apt install -y mosquitto mosquitto-clients
+sudo systemctl enable mosquitto
+sudo systemctl start mosquitto
+```
+
+По умолчанию брокер слушает порт `1883` на `localhost`.  
+Если брокер стоит на другом устройстве — поменяй `broker_host` в `config.json`.
+
+### 4. Разреши перезагрузку без пароля (для команды `device/restart`)
+
+```bash
+echo "pi ALL=(ALL) NOPASSWD: /sbin/reboot" | sudo tee /etc/sudoers.d/smartmirror
+```
+
+### 5. Настрой `config.json` под свои нужды
+
+```json
+{
+  "mqtt": {
+    "broker_host": "localhost",
+    "broker_port": 1883,
+    "topic_prefix": "mirror/"
+  },
+  "weather": {
+    "latitude": 55.75,
+    "longitude": 37.62,
+    "refresh_interval_seconds": 300
+  },
+  "intervals": {
+    "time_seconds": 60,
+    "phrase_seconds": 1800,
+    "alarm_check_seconds": 60
+  },
+  "phrases_file": "smart_mirror/data/phrases.json"
+}
+```
+
+> Координаты по умолчанию используются только если локация не определена автоматически по IP и не задана командой `location/set`.
+
+---
+
+## Первый запуск
+
+```bash
+cd ~/smart-mirror
+python3 main.py
+```
+
+При запуске приложение:
+1. Читает `config.json`
+2. Пытается определить местоположение по IP (ip-api.com) — если не задано вручную
+3. Запускает рутины: время, погода, фразы, проверка будильника
+4. Подключается к MQTT-брокеру и ждёт команд
+
+**Пример вывода в консоль:**
+
+```
+----------------------------------------
+  Время:    09:15
+  Место:    Москва (55.7500, 37.6200)
+----------------------------------------
+  Погода:   Ясно
+  Темп:     18.3°C
+  Ветер:    7.0 км/ч
+----------------------------------------
+  >> Сделай сегодня то, за что завтра скажешь себе спасибо.
+----------------------------------------
+  Будильник: 07:30
+----------------------------------------
+```
+
+Остановить: `Ctrl+C`.
+
+---
+
+## Автозапуск при старте системы
+
+Чтобы приложение запускалось само при включении Pi:
+
+```bash
+# Создаём systemd-сервис
+sudo nano /etc/systemd/system/smart-mirror.service
+```
+
+Содержимое файла:
+
+```ini
+[Unit]
+Description=Smart Mirror
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/smart-mirror
+ExecStart=/usr/bin/python3 main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Включить и запустить:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable smart-mirror
+sudo systemctl start smart-mirror
+
+# Смотреть логи в реальном времени:
+sudo journalctl -u smart-mirror -f
+```
+
+---
+
+## Тест железа
+
+Перед первым запуском основного приложения убедись, что все компоненты подключены правильно.
+
+**Компоненты:** ST7735 TFT (SPI), TTP223 (кнопка, GPIO17), KY-012 (зуммер, GPIO18).
+
+### Установка зависимостей для теста
+
+```bash
+pip install luma.lcd RPi.GPIO Pillow
+```
+
+Включи SPI, если ещё не включено:
+
+```bash
+sudo raspi-config
+# → Interface Options → SPI → Enable → Finish
+sudo reboot
+```
+
+### Запуск теста
+
+```bash
+python3 test_hardware.py
+```
+
+Скрипт по очереди проверит каждый компонент и выведет итог:
+
+```
+====================================================
+  Результаты:
+  [ OK  ] ST7735 дисплей
+  [ OK  ] KY-012 зуммер
+  [ OK  ]  TTP223 кнопка
+====================================================
+  Все компоненты работают!
+```
+
+---
+
+## Структура файлов
+
+```
+smart-mirror/
+├── main.py                        ← точка входа
+├── config.json                    ← настройки (MQTT, погода, интервалы)
+├── settings.json                  ← данные пользователя (будильник, локация)
+├── requirements.txt
+├── test_hardware.py               ← тест железа (не часть приложения)
+└── smart_mirror/
+    ├── core/       config · settings · app
+    ├── commands/   set_alarm · clear_alarm · set_location · restart_device
+    ├── routines/   time · weather · phrase · alarm_check
+    ├── display/    base (ABC) · console_display · screen_state
+    ├── mqtt/       client
+    ├── weather/    fetcher (Open-Meteo)
+    ├── location/   detector (ip-api.com)
+    └── data/       alarm · weather · location · phrases.json
+```
+
+`settings.json` создаётся и перезаписывается автоматически — не редактируй вручную.
+
+---
+
+## MQTT API
 
 ## Подключение к брокеру
 
