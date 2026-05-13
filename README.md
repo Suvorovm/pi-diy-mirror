@@ -37,13 +37,34 @@ git clone <url-репозитория> ~/smart-mirror
 cd ~/smart-mirror
 ```
 
-### 2. Установи зависимости
+### 2. Создай venv и установи зависимости
+
+GPIO на Raspberry Pi требует `sudo`, а `sudo` не видит глобально установленные пакеты.
+Поэтому используем venv и запускаем скрипты через `run.sh`.
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ```
 
-### 3. Установи и запусти MQTT-брокер (Mosquitto)
+### 3. Сделай `run.sh` исполняемым
+
+```bash
+chmod +x run.sh
+```
+
+`run.sh` автоматически передаёт `sudo` правильный Python из venv:
+```bash
+./run.sh main.py            # основное приложение
+./run.sh test_hardware.py   # тест железа
+```
+
+> **Почему нельзя просто `sudo python3`?**  
+> `sudo` сбрасывает переменные окружения и использует системный Python,
+> который не видит пакеты из venv. `run.sh` решает это, передавая полный путь
+> к `.venv/bin/python3` напрямую в `sudo`.
+
+### 4. Установи и запусти MQTT-брокер (Mosquitto)
 
 ```bash
 sudo apt install -y mosquitto mosquitto-clients
@@ -54,13 +75,13 @@ sudo systemctl start mosquitto
 По умолчанию брокер слушает порт `1883` на `localhost`.  
 Если брокер стоит на другом устройстве — поменяй `broker_host` в `config.json`.
 
-### 4. Разреши перезагрузку без пароля (для команды `device/restart`)
+### 5. Разреши перезагрузку без пароля (для команды `device/restart`)
 
 ```bash
 echo "pi ALL=(ALL) NOPASSWD: /sbin/reboot" | sudo tee /etc/sudoers.d/smartmirror
 ```
 
-### 5. Настрой `config.json` под свои нужды
+### 6. Настрой `config.json` под свои нужды
 
 ```json
 {
@@ -91,7 +112,7 @@ echo "pi ALL=(ALL) NOPASSWD: /sbin/reboot" | sudo tee /etc/sudoers.d/smartmirror
 
 ```bash
 cd ~/smart-mirror
-python3 main.py
+./run.sh main.py
 ```
 
 При запуске приложение:
@@ -127,7 +148,7 @@ python3 main.py
 
 ```bash
 # Создаём systemd-сервис
-sudo nano /etc/systemd/system/smart-mirror.service
+sudo nano /etc/systemd/system/smart_mirror.service
 ```
 
 Содержимое файла:
@@ -140,9 +161,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
+User=root
 WorkingDirectory=/home/pi/smart-mirror
-ExecStart=/usr/bin/python3 main.py
+ExecStart=/home/pi/smart-mirror/.venv/bin/python3 main.py
 Restart=on-failure
 RestartSec=5
 
@@ -150,15 +171,18 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
+> Используем `User=root` и прямой путь к `.venv/bin/python3` — так systemd
+> запускает приложение с правами GPIO и видит все пакеты из venv.
+
 Включить и запустить:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable smart-mirror
-sudo systemctl start smart-mirror
+sudo systemctl enable smart_mirror
+sudo systemctl start smart_mirror
 
 # Смотреть логи в реальном времени:
-sudo journalctl -u smart-mirror -f
+sudo journalctl -u smart_mirror -f
 ```
 
 ---
@@ -172,7 +196,7 @@ sudo journalctl -u smart-mirror -f
 ### Установка зависимостей для теста
 
 ```bash
-pip install luma.lcd RPi.GPIO Pillow
+.venv/bin/pip install luma.lcd RPi.GPIO Pillow
 ```
 
 Включи SPI, если ещё не включено:
@@ -186,8 +210,11 @@ sudo reboot
 ### Запуск теста
 
 ```bash
-python3 test_hardware.py
+./run.sh test_hardware.py
 ```
+
+> `sudo python3 test_hardware.py` — **не работает**: sudo видит системный Python,
+> а не пакеты из venv. `run.sh` решает это автоматически.
 
 Скрипт по очереди проверит каждый компонент и выведет итог:
 
@@ -208,6 +235,7 @@ python3 test_hardware.py
 ```
 smart-mirror/
 ├── main.py                        ← точка входа
+├── run.sh                         ← запускает скрипты через venv + sudo
 ├── config.json                    ← настройки (MQTT, погода, интервалы)
 ├── settings.json                  ← данные пользователя (будильник, локация)
 ├── requirements.txt

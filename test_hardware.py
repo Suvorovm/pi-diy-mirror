@@ -35,13 +35,17 @@ test_hardware.py — Проверка компонентов умного зер
   -      │ GND
 
 Установка зависимостей (только для этого скрипта):
-  pip install luma.lcd RPi.GPIO Pillow
+  venv/bin/pip install luma.lcd RPi.GPIO Pillow
 
 Включение SPI на Pi (если ещё не включено):
-  sudo raspi-config → Interface Options → SPI → Enable
+  sudo raspi-config → Interface Options → SPI → Enable → Reboot
 
-Запуск:
-  python3 test_hardware.py
+Запуск (через run.sh, он передаёт venv-интерпретатор в sudo):
+  ./run.sh test_hardware.py
+
+Почему нельзя просто "sudo python3 test_hardware.py":
+  sudo использует системный Python, который не видит пакеты из venv.
+  run.sh передаёт sudo полный путь к venv/bin/python3 — проблема решена.
 """
 
 import sys
