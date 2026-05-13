@@ -34,8 +34,8 @@ test_hardware.py — Проверка компонентов умного зер
   +      │ 3.3V
   -      │ GND
 
-Установка зависимостей (только для этого скрипта):
-  venv/bin/pip install luma.lcd RPi.GPIO Pillow
+Установка зависимостей:
+  .venv/bin/pip install -r requirements.txt
 
 Включение SPI на Pi (если ещё не включено):
   sudo raspi-config → Interface Options → SPI → Enable → Reboot

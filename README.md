@@ -195,9 +195,7 @@ sudo journalctl -u smart_mirror -f
 
 ### Установка зависимостей для теста
 
-```bash
-.venv/bin/pip install luma.lcd RPi.GPIO Pillow
-```
+Все зависимости уже в общем `requirements.txt` — дополнительно ничего ставить не нужно.
 
 Включи SPI, если ещё не включено:
 
@@ -238,7 +236,7 @@ smart-mirror/
 ├── run.sh                         ← запускает скрипты через venv + sudo
 ├── config.json                    ← настройки (MQTT, погода, интервалы)
 ├── settings.json                  ← данные пользователя (будильник, локация)
-├── requirements.txt
+├── requirements.txt               ← все зависимости проекта
 ├── test_hardware.py               ← тест железа (не часть приложения)
 └── smart_mirror/
     ├── core/       config · settings · app
