@@ -79,6 +79,7 @@ class BleProvisioner:
 
     def start(self) -> None:
         """Start advertising in a background daemon thread."""
+        self._prepare_adapter()
         self._thread = threading.Thread(
             target=self._run_loop,
             daemon=True,
@@ -86,6 +87,59 @@ class BleProvisioner:
         )
         self._thread.start()
         logger.info("BLE provisioner started (advertising as '%s')", DEVICE_NAME)
+
+    @staticmethod
+    def _prepare_adapter() -> None:
+        """Ensure the BLE adapter is ready for LE advertising.
+
+        bless on some BlueZ versions does not register the advertisement
+        packet correctly, so we drive it manually via bluetoothctl.
+        bless still handles the GATT application (characteristics).
+        """
+        import subprocess
+
+        # 1. Enable LE at the controller level
+        for cmd in [
+            ["sudo", "btmgmt", "le", "on"],
+            ["sudo", "btmgmt", "connectable", "on"],
+        ]:
+            try:
+                subprocess.run(cmd, capture_output=True, timeout=5)
+            except Exception as e:
+                logger.warning("btmgmt %s failed: %s", cmd[2], e)
+
+        # 2. Set adapter alias so the device name is correct in scan results
+        try:
+            subprocess.run(
+                ["bluetoothctl", "system-alias", DEVICE_NAME],
+                capture_output=True,
+                timeout=5,
+            )
+            logger.info("BLE adapter alias set to '%s'", DEVICE_NAME)
+        except Exception as e:
+            logger.warning("Failed to set adapter alias: %s", e)
+
+        # 3. Register advertisement (name + service UUID) via bluetoothctl
+        bt_script = "\n".join([
+            "menu advertise",
+            f"name {DEVICE_NAME}",
+            f"uuids {SERVICE_UUID}",
+            "discoverable on",
+            "back",
+            "advertise on",
+            "quit",
+        ]) + "\n"
+        try:
+            subprocess.run(
+                ["bluetoothctl"],
+                input=bt_script,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            logger.info("BLE advertising configured via bluetoothctl")
+        except Exception as e:
+            logger.warning("bluetoothctl advertising setup failed: %s", e)
 
     def stop(self) -> None:
         """Signal the BLE server to shut down cleanly."""
