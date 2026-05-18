@@ -71,6 +71,7 @@ class BleProvisioner:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._server: BlessServer | None = None
         self._thread: threading.Thread | None = None
+        self._stop_event: asyncio.Event | None = None
         # Prevents parallel connection attempts
         self._connecting = False
 
@@ -87,9 +88,9 @@ class BleProvisioner:
         logger.info("BLE provisioner started (advertising as '%s')", DEVICE_NAME)
 
     def stop(self) -> None:
-        """Signal the event loop to stop."""
-        if self._loop and self._loop.is_running():
-            self._loop.call_soon_threadsafe(self._loop.stop)
+        """Signal the BLE server to shut down cleanly."""
+        if self._loop and self._loop.is_running() and self._stop_event is not None:
+            self._loop.call_soon_threadsafe(self._stop_event.set)
 
     # ── Internal — runs inside the daemon thread ────────────────────────────────
 
@@ -107,6 +108,9 @@ class BleProvisioner:
 
     async def _serve(self) -> None:
         loop = asyncio.get_running_loop()
+
+        # asyncio.Event for clean shutdown — set by stop() via call_soon_threadsafe
+        self._stop_event = asyncio.Event()
 
         server = BlessServer(name=DEVICE_NAME, loop=loop)
         server.read_request_func = self._on_read
@@ -130,10 +134,13 @@ class BleProvisioner:
 
         await server.add_gatt(gatt)
         await server.start()
-        logger.info("BLE GATT server started, waiting for connections...")
+        logger.info("BLE GATT server started, advertising as '%s'", DEVICE_NAME)
 
-        # Keep the loop alive until stop() is called
-        await asyncio.get_event_loop().create_future()
+        # Block until stop() is called — cleaner than raw create_future()
+        await self._stop_event.wait()
+
+        await server.stop()
+        logger.info("BLE GATT server stopped")
 
     # ── GATT callbacks ──────────────────────────────────────────────────────────
 

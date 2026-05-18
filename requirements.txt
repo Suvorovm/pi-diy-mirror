@@ -3,9 +3,10 @@ paho-mqtt==2.1.0
 requests==2.32.3
 
 # BLE Wi-Fi provisioning (GATT server)
-# На Raspberry Pi требует BlueZ: sudo apt install bluetooth bluez python3-dbus
-# После установки: sudo systemctl enable --now bluetooth
+# На Raspberry Pi: sudo apt install bluetooth bluez
+# После: sudo systemctl enable --now bluetooth && sudo usermod -aG bluetooth $USER
 bless==0.3.0
+dbus-next==0.2.3   # bless использует dbus_next напрямую (from dbus_next.aio import MessageBus)
 
 # Дисплей и железо (ST7735, GPIO, зуммер, кнопка)
 # Пока используется только в test_hardware.py,
