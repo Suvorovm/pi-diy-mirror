@@ -5,13 +5,13 @@
     "topic_prefix": "mirror/"
   },
   "weather": {
-    "latitude": 55.75,
-    "longitude": 37.62,
-    "refresh_interval_seconds": 300
+    "latitude": 53.12,
+    "longitude": 45.00,
+    "refresh_interval_seconds": 600
   },
   "intervals": {
     "time_seconds": 60,
-    "phrase_seconds": 1800,
+    "phrase_seconds": 180,
     "alarm_check_seconds": 60
   },
   "phrases_file": "smart_mirror/data/phrases.json",

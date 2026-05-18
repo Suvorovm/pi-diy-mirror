@@ -26,6 +26,13 @@ from smart_mirror.routines.runner import RoutineRunner
 from smart_mirror.routines.time_routine import TimeRoutine
 from smart_mirror.routines.weather_routine import WeatherRoutine
 from smart_mirror.weather.fetcher import WeatherFetcher
+from smart_mirror.wifi.wifi_manager import WifiManager
+
+try:
+    from smart_mirror.wifi.ble_provisioner import BleProvisioner
+    _BLE_AVAILABLE = True
+except ImportError:
+    _BLE_AVAILABLE = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -108,6 +115,18 @@ def main() -> None:
 
     mqtt_client = MqttClient(config.mqtt, registry)
 
+    # BLE Wi-Fi provisioner — runs in background, restarts MQTT after network change
+    # Disabled automatically on systems without BlueZ (e.g. Windows dev machines)
+    if not _BLE_AVAILABLE:
+        logger.warning("BLE not available (bless not installed) — Wi-Fi provisioning via BLE disabled")
+    ble_provisioner = None
+    if _BLE_AVAILABLE:
+        ble_provisioner = BleProvisioner(
+            wifi_manager=WifiManager(),
+            on_wifi_connected=mqtt_client.restart,
+        )
+        ble_provisioner.start()
+
     app = SmartMirrorApp(
         config=config,
         settings=settings,
@@ -120,6 +139,8 @@ def main() -> None:
     try:
         app.run_forever()
     finally:
+        if ble_provisioner is not None:
+            ble_provisioner.stop()
         if config.display_type == "st7735":
             try:
                 import RPi.GPIO as GPIO

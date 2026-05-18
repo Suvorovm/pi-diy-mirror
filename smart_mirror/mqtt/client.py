@@ -15,20 +15,40 @@ class MqttClient:
     def __init__(self, config: MqttConfig, registry: CommandRegistry) -> None:
         self._config = config
         self._registry = registry
-        self._client = mqtt.Client()
-        self._client.on_connect = self._on_connect
-        self._client.on_message = self._on_message
-        self._client.on_disconnect = self._on_disconnect
+        self._client = self._make_client()
+
+    def _make_client(self) -> mqtt.Client:
+        client = mqtt.Client()
+        client.on_connect = self._on_connect
+        client.on_message = self._on_message
+        client.on_disconnect = self._on_disconnect
+        return client
 
     def start(self) -> None:
-        self._client.connect(self._config.broker_host, self._config.broker_port)
-        self._client.loop_start()
-        logger.info("MQTT client started, connecting to %s:%d", self._config.broker_host, self._config.broker_port)
+        try:
+            self._client.connect(self._config.broker_host, self._config.broker_port)
+            self._client.loop_start()
+            logger.info("MQTT client started, connecting to %s:%d", self._config.broker_host, self._config.broker_port)
+        except Exception:
+            logger.exception("MQTT start failed — will retry on next restart()")
 
     def stop(self) -> None:
-        self._client.loop_stop()
-        self._client.disconnect()
+        try:
+            self._client.loop_stop()
+            self._client.disconnect()
+        except Exception:
+            logger.debug("MQTT stop raised (expected if not connected)")
         logger.info("MQTT client stopped")
+
+    def restart(self) -> None:
+        """
+        Stop the current paho client, create a fresh one, and reconnect.
+        Called after a Wi-Fi network change so paho doesn't reuse stale sockets.
+        """
+        logger.info("Restarting MQTT client after network change...")
+        self.stop()
+        self._client = self._make_client()
+        self.start()
 
     def _on_connect(self, client, userdata, flags, rc) -> None:
         if rc == 0:
