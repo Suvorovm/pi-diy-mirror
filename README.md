@@ -100,9 +100,14 @@ echo "pi ALL=(ALL) NOPASSWD: /sbin/reboot" | sudo tee /etc/sudoers.d/smartmirror
     "phrase_seconds": 1800,
     "alarm_check_seconds": 60
   },
-  "phrases_file": "smart_mirror/data/phrases.json"
+  "phrases_file": "smart_mirror/data/phrases.json",
+  "display_type": "st7735"
 }
 ```
+
+| Поле           | Значения             | Описание                                              |
+|----------------|----------------------|-------------------------------------------------------|
+| `display_type` | `"console"` / `"st7735"` | Тип дисплея. `console` — вывод в терминал (для разработки), `st7735` — TFT-экран + GPIO-железо на Pi |
 
 > Координаты по умолчанию используются только если локация не определена автоматически по IP и не задана командой `location/set`.
 
@@ -116,10 +121,15 @@ cd ~/smart-mirror
 ```
 
 При запуске приложение:
-1. Читает `config.json`
+1. Читает `config.json` (в т.ч. `display_type` — выбирает дисплей и GPIO-железо)
 2. Пытается определить местоположение по IP (ip-api.com) — если не задано вручную
 3. Запускает рутины: время, погода, фразы, проверка будильника
 4. Подключается к MQTT-брокеру и ждёт команд
+
+**Поведение будильника:**  
+Когда время совпадает с установленным — включается зуммер KY-012 и на экране появляется баннер.  
+Зуммер отключается только после прикосновения к кнопке TTP223.  
+При `display_type: "console"` вместо зуммера — сообщение в логе, вместо кнопки — нажатие Enter.
 
 **Пример вывода в консоль:**
 
@@ -265,19 +275,56 @@ sudo reboot
 smart-mirror/
 ├── main.py                        ← точка входа
 ├── run.sh                         ← запускает скрипты через venv + sudo
-├── config.json                    ← настройки (MQTT, погода, интервалы)
+├── config.json                    ← настройки (MQTT, погода, интервалы, display_type)
 ├── settings.json                  ← данные пользователя (будильник, локация)
 ├── requirements.txt               ← все зависимости проекта
 ├── test_hardware.py               ← тест железа (не часть приложения)
 └── smart_mirror/
-    ├── core/       config · settings · app
-    ├── commands/   set_alarm · clear_alarm · set_location · restart_device
-    ├── routines/   time · weather · phrase · alarm_check
-    ├── display/    base (ABC) · console_display · screen_state
-    ├── mqtt/       client
-    ├── weather/    fetcher (Open-Meteo)
-    ├── location/   detector (ip-api.com)
-    └── data/       alarm · weather · location · phrases.json
+    ├── core/
+    │   ├── config.py              ← Config (читает config.json)
+    │   ├── settings.py            ← SettingsManager (будильник, локация)
+    │   └── app.py                 ← SmartMirrorApp (start/stop/run_forever)
+    ├── commands/
+    │   ├── command.py             ← Command ABC + CommandPayload
+    │   ├── registry.py            ← CommandRegistry (topic → Command)
+    │   ├── set_alarm.py
+    │   ├── clear_alarm.py
+    │   ├── set_location.py
+    │   └── restart_device.py
+    ├── routines/
+    │   ├── routine.py             ← Routine ABC
+    │   ├── runner.py              ← RoutineRunner (daemon thread на рутину)
+    │   ├── time_routine.py
+    │   ├── weather_routine.py
+    │   ├── phrase_routine.py
+    │   └── alarm_check_routine.py
+    ├── display/
+    │   ├── display_adapter.py     ← DisplayAdapter ABC
+    │   ├── screen_state.py        ← ScreenState dataclass
+    │   ├── console_display.py     ← вывод в терминал
+    │   └── st7735_display.py      ← ST7735 TFT через luma.lcd
+    ├── hardware/
+    │   ├── buzzer/
+    │   │   ├── buzzer_adapter.py  ← BuzzerAdapter ABC
+    │   │   ├── console.py         ← ConsoleBuzzer (лог)
+    │   │   └── ky012.py           ← Ky012Buzzer (GPIO19)
+    │   └── button/
+    │       ├── touch_button_adapter.py ← TouchButtonAdapter ABC
+    │       ├── console.py         ← ConsoleButton (Enter)
+    │       └── ttp223.py          ← Ttp223Button (GPIO17, RISING edge)
+    ├── alarm/
+    │   └── handler.py             ← AlarmHandler (дисплей + зуммер + кнопка)
+    ├── mqtt/
+    │   └── client.py              ← MqttClient (paho wrapper)
+    ├── weather/
+    │   └── fetcher.py             ← WeatherFetcher (Open-Meteo, без ключа)
+    ├── location/
+    │   └── detector.py            ← LocationDetector (ip-api.com, без ключа)
+    └── data/
+        ├── alarm.py
+        ├── weather.py
+        ├── location.py
+        └── phrases.json
 ```
 
 `settings.json` создаётся и перезаписывается автоматически — не редактируй вручную.
@@ -345,7 +392,9 @@ Retain:  не нужен
 **Что происходит:**
 - Будильник сохраняется в `settings.json`
 - На экране появляется время будильника
-- Каждые `alarm_check_seconds` (60 сек) `AlarmCheckRoutine` сверяет время — при совпадении показывает уведомление
+- Каждые `alarm_check_seconds` (60 сек) `AlarmCheckRoutine` сверяет время
+- При совпадении: включается зуммер KY-012 + на экране появляется баннер
+- Зуммер отключается только после прикосновения к кнопке TTP223
 
 **Примеры:**
 ```json
@@ -438,12 +487,26 @@ Retain:  не нужен
 | Погода            | `weather.refresh_interval_seconds` (300 с)   | Open-Meteo API               |
 | Фраза             | `intervals.phrase_seconds` (1800 с)          | `data/phrases.json`          |
 | Проверка будильника | `intervals.alarm_check_seconds` (60 с)     | `settings.json`              |
+| Зуммер (будильник) | Включается при срабатывании, выключается по кнопке | KY-012 GPIO19 / лог |
 
 ---
 
-## Настройка интервалов
+## Настройка `config.json`
 
-Все интервалы меняются в `config.json` — перезапуск приложения обязателен.
+Все параметры меняются в `config.json` — перезапуск приложения обязателен.
+
+### Тип дисплея
+
+```json
+{ "display_type": "st7735" }
+```
+
+| Значение    | Что включается                                              |
+|-------------|-------------------------------------------------------------|
+| `"console"` | Вывод в терминал, зуммер → лог, кнопка → Enter в stdin     |
+| `"st7735"`  | TFT-экран (SPI), зуммер KY-012 (GPIO19), кнопка TTP223 (GPIO17) |
+
+### Интервалы обновления
 
 ```json
 {
@@ -483,7 +546,7 @@ Retain:  не нужен
 
 ```python
 from dataclasses import dataclass
-from smart_mirror.commands.base import Command, CommandPayload
+from smart_mirror.commands.command import Command, CommandPayload
 
 @dataclass
 class YourPayload(CommandPayload):

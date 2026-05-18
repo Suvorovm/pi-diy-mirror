@@ -14,5 +14,6 @@
     "phrase_seconds": 1800,
     "alarm_check_seconds": 60
   },
-  "phrases_file": "smart_mirror/data/phrases.json"
+  "phrases_file": "smart_mirror/data/phrases.json",
+  "display_type": "st7735" 
 }

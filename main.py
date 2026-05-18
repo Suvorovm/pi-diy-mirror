@@ -1,4 +1,3 @@
-import argparse
 import logging
 import os
 import sys
@@ -77,21 +76,12 @@ def _bootstrap_location(settings: SettingsManager, display: ConsoleDisplay) -> N
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Smart Mirror")
-    parser.add_argument(
-        "--display",
-        choices=["console", "st7735"],
-        default="console",
-        help="Бэкенд дисплея: console (по умолчанию) или st7735 (TFT на Pi)",
-    )
-    args = parser.parse_args()
-
     config = Config.load(os.path.join(BASE_DIR, "config.json"))
     settings = SettingsManager(os.path.join(BASE_DIR, "settings.json"))
-    display = _build_display(args.display)
-    buzzer, button = _build_hardware(args.display)
+    display = _build_display(config.display_type)
+    buzzer, button = _build_hardware(config.display_type)
     alarm_handler = AlarmHandler(display, buzzer, button)
-    logger.info("Display backend: %s", args.display)
+    logger.info("Display backend: %s", config.display_type)
 
     # Determine location before starting routines
     _bootstrap_location(settings, display)
@@ -130,7 +120,7 @@ def main() -> None:
     try:
         app.run_forever()
     finally:
-        if args.display == "st7735":
+        if config.display_type == "st7735":
             try:
                 import RPi.GPIO as GPIO
                 GPIO.cleanup()
