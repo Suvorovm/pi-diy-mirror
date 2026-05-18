@@ -38,8 +38,8 @@ import threading
 from typing import Callable
 
 from bless import BlessServer, BlessGATTCharacteristic  # type: ignore[import]
-from bless import BlessGATTCharacteristicProperties as Prop  # type: ignore[import]
-from bless import BlessGATTCharacteristicPermissions as Perm  # type: ignore[import]
+from bless import GATTCharacteristicProperties as Prop  # type: ignore[import]
+from bless import GATTAttributePermissions as Perm  # type: ignore[import]
 
 from smart_mirror.wifi.wifi_manager import WifiManager, WifiResult
 
