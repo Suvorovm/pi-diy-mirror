@@ -27,4 +27,9 @@ class DisplayAdapter(ABC):
     def show_alarm_triggered(self) -> None: ...
 
     @abstractmethod
+    def dismiss_alarm_triggered(self) -> None:
+        """Убрать баннер будильника (вызывается после нажатия кнопки)."""
+        ...
+
+    @abstractmethod
     def render(self) -> None: ...

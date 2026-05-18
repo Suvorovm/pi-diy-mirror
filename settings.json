@@ -3,5 +3,9 @@
     "latitude": 55.75,
     "longitude": 37.62,
     "city": "Москва"
+  },
+  "alarm": {
+    "hour": 0,
+    "minute": 0
   }
 }

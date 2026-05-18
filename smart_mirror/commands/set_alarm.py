@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from smart_mirror.commands.base import Command, CommandPayload
+from smart_mirror.commands.command import Command, CommandPayload
 from smart_mirror.data.alarm import AlarmData
 
 

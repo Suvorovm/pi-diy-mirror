@@ -6,7 +6,7 @@ import threading
 from smart_mirror.commands.registry import CommandRegistry
 from smart_mirror.core.config import Config
 from smart_mirror.core.settings import SettingsManager
-from smart_mirror.display.base import DisplayAdapter
+from smart_mirror.display.display_adapter import DisplayAdapter
 from smart_mirror.mqtt.client import MqttClient
 from smart_mirror.routines.runner import RoutineRunner
 

@@ -4,7 +4,7 @@ import logging
 import subprocess
 from dataclasses import dataclass
 
-from smart_mirror.commands.base import Command, CommandPayload
+from smart_mirror.commands.command import Command, CommandPayload
 
 logger = logging.getLogger(__name__)
 

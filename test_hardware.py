@@ -17,8 +17,8 @@ test_hardware.py — Проверка компонентов умного зер
   GND    │ GND   (Pin 6)
   SCL    │ GPIO11 / SCLK (Pin 23)
   SDA    │ GPIO10 / MOSI (Pin 19)
-  RES    │ GPIO25        (Pin 22)
-  DC     │ GPIO24        (Pin 18)
+  RES    │ GPIO24        (Pin 18)
+  DC     │ GPIO25        (Pin 22)
   CS     │ GPIO8  / CE0  (Pin 24)
   BL/LED │ 3.3V  (Pin 1 или 17)
 
@@ -30,7 +30,7 @@ test_hardware.py — Проверка компонентов умного зер
 
   KY-012 │ Raspberry Pi
   ───────┼─────────────
-  S      │ GPIO18
+  S      │ GPIO19
   +      │ 3.3V
   -      │ GND
 
@@ -53,9 +53,9 @@ import time
 
 # ─── Пины ────────────────────────────────────────────────────────────────────
 PIN_TOUCH = 17    # TTP223 — вывод OUT
-PIN_BUZZER = 18   # KY-012 — вывод S
+PIN_BUZZER = 19   # KY-012 — вывод S
 
-# ST7735 — SPI0: CLK=GPIO11, MOSI=GPIO10, CS=GPIO8, DC=GPIO24, RES=GPIO25
+# ST7735 — SPI0: CLK=GPIO11, MOSI=GPIO10, CS=GPIO8, DC=GPIO25, RES=GPIO24
 # (настраивается через luma.lcd ниже)
 
 # ─── Параметры теста ─────────────────────────────────────────────────────────
@@ -85,9 +85,9 @@ def test_display() -> bool:
 
     print("  [Дисплей] Подключение к ST7735 через SPI...")
     try:
-        serial = spi(port=0, device=0, gpio_DC=24, gpio_RST=25)
-        # ST7735 1.8" = 128 x 160, bgr=True для правильных цветов
-        device = st7735(serial, width=128, height=160, bgr=True, h_offset=0, v_offset=0)
+        serial = spi(port=0, device=0, gpio_DC=25, gpio_RST=24)
+        # ST7735 1.8" = 160 x 128 (landscape), bgr=True для правильных цветов
+        device = st7735(serial, width=160, height=128, bgr=True)
     except Exception as e:
         print(f"  [Дисплей] Ошибка инициализации: {e}")
         return False

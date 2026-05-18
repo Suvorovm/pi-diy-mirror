@@ -5,8 +5,8 @@ import logging
 from smart_mirror.core.config import WeatherConfig
 from smart_mirror.core.settings import SettingsManager
 from smart_mirror.data.location import LocationData
-from smart_mirror.display.base import DisplayAdapter
-from smart_mirror.routines.base import Routine
+from smart_mirror.display.display_adapter import DisplayAdapter
+from smart_mirror.routines.routine import Routine
 from smart_mirror.weather.fetcher import WeatherFetcher
 
 logger = logging.getLogger(__name__)

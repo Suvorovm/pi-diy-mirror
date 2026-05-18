@@ -4,7 +4,7 @@ import logging
 import threading
 import time
 
-from smart_mirror.routines.base import Routine
+from smart_mirror.routines.routine import Routine
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from smart_mirror.core.settings import SettingsManager
-    from smart_mirror.display.base import DisplayAdapter
+    from smart_mirror.display.display_adapter import DisplayAdapter
 
 
 @dataclass

@@ -7,7 +7,7 @@ import threading
 from smart_mirror.data.alarm import AlarmData
 from smart_mirror.data.location import LocationData
 from smart_mirror.data.weather import WeatherData
-from smart_mirror.display.base import DisplayAdapter
+from smart_mirror.display.display_adapter import DisplayAdapter
 from smart_mirror.display.screen_state import ScreenState
 
 _SEPARATOR = "-" * 40
@@ -47,6 +47,11 @@ class ConsoleDisplay(DisplayAdapter):
     def show_alarm_triggered(self) -> None:
         with self._lock:
             self._state.alarm_triggered = True
+        self.render()
+
+    def dismiss_alarm_triggered(self) -> None:
+        with self._lock:
+            self._state.alarm_triggered = False
         self.render()
 
     def render(self) -> None:
