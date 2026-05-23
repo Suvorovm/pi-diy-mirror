@@ -37,11 +37,15 @@ class WifiManager:
         """
         logger.info("Connecting to Wi-Fi SSID: %s", ssid)
         try:
-            cmd = ["nmcli", "device", "wifi", "connect", ssid]
-            if password:
-                cmd += ["password", password, "wifi-sec.key-mgmt", "wpa-psk"]
+            # Remove stale profile if exists — prevents "key-mgmt missing" error
+            subprocess.run(
+                ["nmcli", "connection", "delete", ssid],
+                capture_output=True,
+                timeout=5,
+            )
+
             result = subprocess.run(
-                cmd,
+                ["nmcli", "device", "wifi", "connect", ssid, "password", password],
                 capture_output=True,
                 text=True,
                 timeout=_CONNECT_TIMEOUT,
