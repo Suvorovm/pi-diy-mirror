@@ -64,8 +64,8 @@ class Ttp223Button(TouchButtonAdapter):
     def stop_listening(self) -> None:
         if self._stop_event is not None:
             self._stop_event.set()
-        if self._thread is not None:
+        if self._thread is not None and self._thread is not threading.current_thread():
             self._thread.join(timeout=1.0)
-            self._thread = None
+        self._thread = None
         self._stop_event = None
         logger.debug("TTP223 stopped listening on GPIO%d", self._pin)
