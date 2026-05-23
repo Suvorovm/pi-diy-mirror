@@ -1,4 +1,9 @@
 #!/bin/bash
+
+git fetch
+
+git pull
+
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
