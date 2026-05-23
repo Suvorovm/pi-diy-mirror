@@ -12,8 +12,9 @@ class AlarmCheckRoutine(Routine):
     Каждые interval_seconds проверяет, пришло ли время будильника.
     При совпадении — делегирует в AlarmHandler (зуммер + экран + кнопка).
 
-    Защита от повторного срабатывания: _last_triggered хранит дату
-    последнего срабатывания — один будильник в день.
+    Защита от повторного срабатывания: _last_triggered хранит (дата, час, минута)
+    последнего срабатывания. Если пользователь ставит новый будильник на другое
+    время — ключ не совпадает и будильник сработает снова.
     """
 
     def __init__(
@@ -25,7 +26,7 @@ class AlarmCheckRoutine(Routine):
         super().__init__(interval_seconds)
         self._settings = settings
         self._alarm_handler = alarm_handler
-        self._last_triggered: date | None = None
+        self._last_triggered: tuple[date, int, int] | None = None
 
     def execute(self) -> None:
         alarm = self._settings.get_alarm()
@@ -33,11 +34,10 @@ class AlarmCheckRoutine(Routine):
             return
 
         now = datetime.now()
-        today = now.date()
-
-        if self._last_triggered == today:
-            return
 
         if now.hour == alarm.hour and now.minute == alarm.minute:
-            self._last_triggered = today
+            key = (now.date(), alarm.hour, alarm.minute)
+            if self._last_triggered == key:
+                return
+            self._last_triggered = key
             self._alarm_handler.trigger()
