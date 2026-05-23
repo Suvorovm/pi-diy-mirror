@@ -37,15 +37,34 @@ class WifiManager:
         """
         logger.info("Connecting to Wi-Fi SSID: %s", ssid)
         try:
-            # Remove stale profile if exists — prevents "key-mgmt missing" error
+            # Remove stale profile to avoid "key-mgmt missing" errors
             subprocess.run(
                 ["nmcli", "connection", "delete", ssid],
                 capture_output=True,
                 timeout=5,
             )
 
+            # Create a fresh WPA2-PSK profile explicitly
+            add = subprocess.run(
+                [
+                    "nmcli", "connection", "add",
+                    "type", "wifi",
+                    "con-name", ssid,
+                    "ssid", ssid,
+                    "wifi-sec.key-mgmt", "wpa-psk",
+                    "wifi-sec.psk", password,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if add.returncode != 0:
+                logger.error("nmcli connection add failed: %s", (add.stdout + add.stderr).strip())
+                return WifiResult.ERROR
+
+            # Activate the profile
             result = subprocess.run(
-                ["nmcli", "device", "wifi", "connect", ssid, "password", password],
+                ["nmcli", "connection", "up", ssid],
                 capture_output=True,
                 text=True,
                 timeout=_CONNECT_TIMEOUT,
