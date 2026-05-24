@@ -269,6 +269,210 @@ sudo reboot
 
 ---
 
+## BLE Wi-Fi Provisioning
+
+Pi всегда рекламирует себя по BLE как `SMART_MIRROR`. Поведение зависит от того, подключён ли Pi к сети в момент подключения клиента:
+
+**Pi уже в сети** — STATUS-характеристика сразу содержит `{"status":"connected","ip":"..."}`. Клиент читает IP без отправки credentials.
+
+**Pi не в сети** — STATUS содержит `{"status":"idle"}`. Клиент отправляет SSID + пароль, Pi подключается и присылает нотификацию с IP.
+
+---
+
+### GATT-структура
+
+| Тип            | UUID                                    | Описание                          |
+|----------------|-----------------------------------------|-----------------------------------|
+| **Сервис**     | `12345678-1234-5678-1234-56789abcdef0`  | Smart Mirror provisioning service |
+| **Write**      | `abcdef01-1234-5678-1234-56789abcdef0`  | Клиент пишет credentials          |
+| **Notify/Read**| `abcdef02-1234-5678-1234-56789abcdef0`  | Pi шлёт статус + IP               |
+
+#### Write-характеристика — формат payload
+
+```json
+{ "ssid": "Home_Wifi", "password": "12345678" }
+```
+
+#### Notify-характеристика — возможные значения
+
+| Статус           | Payload                                       | Когда                                      |
+|------------------|-----------------------------------------------|--------------------------------------------|
+| `idle`           | `{"status":"idle"}`                           | Pi не в сети, ждёт credentials             |
+| `connecting`     | `{"status":"connecting"}`                     | Pi подключается к Wi-Fi                    |
+| `connected`      | `{"status":"connected","ip":"192.168.1.42"}`  | Pi в сети — при старте **и** после connect |
+| `wrong_password` | `{"status":"wrong_password"}`                 | Неверный пароль                            |
+| `no_internet`    | `{"status":"no_internet"}`                    | AP без интернета                           |
+| `error`          | `{"status":"error"}`                          | Прочая ошибка                              |
+
+> `ip` присутствует только в статусе `connected`. Используй его как `broker_host` в MQTT-клиенте.
+
+---
+
+### Настройка Pi (один раз)
+
+```bash
+sudo systemctl enable --now bluetooth
+sudo usermod -aG bluetooth pi
+sudo systemctl enable --now NetworkManager
+```
+
+---
+
+### Реализация клиента (Flutter / Dart)
+
+Зависимость в `pubspec.yaml`:
+
+```yaml
+dependencies:
+  flutter_blue_plus: ^1.x.x
+```
+
+#### 1. Сканирование и подключение
+
+```dart
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
+const serviceUuid = "12345678-1234-5678-1234-56789abcdef0";
+const writeUuid   = "abcdef01-1234-5678-1234-56789abcdef0";
+const statusUuid  = "abcdef02-1234-5678-1234-56789abcdef0";
+const deviceName  = "SMART_MIRROR";
+
+BluetoothDevice? _device;
+BluetoothCharacteristic? _writeChar;
+BluetoothCharacteristic? _statusChar;
+
+Future<void> connectToMirror() async {
+  final completer = Completer<void>();
+
+  FlutterBluePlus.scanResults.listen((results) async {
+    for (final r in results) {
+      if (r.device.platformName == deviceName && !completer.isCompleted) {
+        await FlutterBluePlus.stopScan();
+        await _setup(r.device);
+        completer.complete();
+        break;
+      }
+    }
+  });
+
+  await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+  await completer.future;
+}
+
+Future<void> _setup(BluetoothDevice device) async {
+  _device = device;
+  await device.connect();
+
+  final services = await device.discoverServices();
+  final svc = services.firstWhere(
+    (s) => s.serviceUuid.toString().toLowerCase() == serviceUuid,
+  );
+
+  _writeChar  = svc.characteristics.firstWhere(
+    (c) => c.characteristicUuid.toString().toLowerCase() == writeUuid,
+  );
+  _statusChar = svc.characteristics.firstWhere(
+    (c) => c.characteristicUuid.toString().toLowerCase() == statusUuid,
+  );
+}
+```
+
+#### 2. Получение IP (автоматически обрабатывает оба сценария)
+
+```dart
+/// Возвращает IP Pi.
+/// — Если Pi уже в сети: читает IP из STATUS сразу, credentials не нужны.
+/// — Если Pi не в сети: отправляет credentials и ждёт нотификацию.
+/// Бросает Exception при wrong_password / no_internet / error / timeout.
+Future<String> getOrProvisionIp({String? ssid, String? password}) async {
+  assert(_statusChar != null, 'Call connectToMirror() first');
+
+  // Подписываемся на нотификации до чтения, чтобы не пропустить события
+  await _statusChar!.setNotifyValue(true);
+
+  final completer = Completer<String>();
+  late StreamSubscription sub;
+
+  sub = _statusChar!.onValueReceived.listen((bytes) {
+    _handleStatus(bytes, completer, sub);
+  });
+
+  // Читаем текущий статус — если Pi уже в сети, завершаем сразу
+  final current = await _statusChar!.read();
+  if (!completer.isCompleted) {
+    _handleStatus(current, completer, sub);
+  }
+
+  // Pi не в сети — нужны credentials
+  if (!completer.isCompleted) {
+    assert(ssid != null && password != null,
+        'Pi is not connected: provide ssid and password');
+    final payload = jsonEncode({'ssid': ssid, 'password': password});
+    await _writeChar!.write(utf8.encode(payload), withoutResponse: false);
+  }
+
+  return completer.future.timeout(
+    const Duration(seconds: 40),
+    onTimeout: () {
+      sub.cancel();
+      throw TimeoutException('Pi не ответил вовремя');
+    },
+  );
+}
+
+void _handleStatus(
+  List<int> bytes,
+  Completer<String> completer,
+  StreamSubscription sub,
+) {
+  if (completer.isCompleted) return;
+  final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+
+  switch (data['status'] as String) {
+    case 'connected':
+      sub.cancel();
+      completer.complete(data['ip'] as String? ?? '');
+    case 'wrong_password':
+      sub.cancel();
+      completer.completeError(Exception('Неверный пароль'));
+    case 'no_internet':
+      sub.cancel();
+      completer.completeError(Exception('Сеть без интернета'));
+    case 'error':
+      sub.cancel();
+      completer.completeError(Exception('Ошибка подключения'));
+    // 'idle' / 'connecting' — обновляй UI, продолжай ждать
+  }
+}
+```
+
+#### 3. Использование
+
+**Pi уже в сети** — credentials не нужны:
+
+```dart
+await connectToMirror();
+final ip = await getOrProvisionIp();         // читает IP из STATUS сразу
+await mqttClient.connect(ip, 1883);
+await _device?.disconnect();
+```
+
+**Первая настройка или смена сети:**
+
+```dart
+await connectToMirror();
+final ip = await getOrProvisionIp(ssid: 'Home_Wifi', password: '12345678');
+await saveMqttHost(ip);                      // SharedPreferences / secure storage
+await mqttClient.connect(ip, 1883);
+await _device?.disconnect();
+```
+
+#### 4. При смене сети
+
+Pi после подключения к новой сети шлёт нотификацию `connected` с новым IP. Для повторного получения адреса достаточно заново вызвать `connectToMirror()` + `getOrProvisionIp(ssid:..., password:...)`.
+
+---
+
 ## Структура файлов
 
 ```

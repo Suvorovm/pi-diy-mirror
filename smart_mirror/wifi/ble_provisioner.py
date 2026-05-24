@@ -34,6 +34,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import socket
 import threading
 from typing import Callable
 
@@ -171,6 +172,15 @@ class BleProvisioner:
         server.write_request_func = self._on_write
         self._server = server
 
+        initial_ip = _get_local_ip()
+        initial_status = (
+            _encode_status("connected", ip=initial_ip)
+            if initial_ip
+            else _encode_status("idle")
+        )
+        if initial_ip:
+            logger.info("BLE: already connected, advertising IP %s", initial_ip)
+
         gatt: dict = {
             SERVICE_UUID: {
                 WRITE_UUID: {
@@ -181,7 +191,7 @@ class BleProvisioner:
                 STATUS_UUID: {
                     "Properties": Prop.read | Prop.notify,
                     "Permissions": Perm.readable,
-                    "Value": _encode_status("idle"),
+                    "Value": initial_status,
                 },
             }
         }
@@ -240,29 +250,43 @@ class BleProvisioner:
             return
 
         logger.info("BLE: Wi-Fi connect result: %s", result.value)
-        await self._notify_status(result.value)
 
         if result == WifiResult.CONNECTED:
+            ip = _get_local_ip()
+            await self._notify_status("connected", ip=ip)
+            logger.info("BLE: notified client with IP %s", ip)
             # Fire the MQTT-restart callback in a separate thread — never block the BLE loop
             threading.Thread(
                 target=self._on_wifi_connected,
                 daemon=True,
                 name="MqttRestart",
             ).start()
+        else:
+            await self._notify_status(result.value)
 
         self._connecting = False
 
-    async def _notify_status(self, status: str) -> None:
+    async def _notify_status(self, status: str, **extra) -> None:
         """Update the STATUS characteristic and push a BLE notification."""
         if self._server is None:
             return
         char = self._server.get_characteristic(STATUS_UUID)
         if char is None:
             return
-        char.value = _encode_status(status)
+        char.value = _encode_status(status, **extra)
         self._server.update_value(SERVICE_UUID, STATUS_UUID)
-        logger.debug("BLE status → %s", status)
+        logger.debug("BLE status → %s %s", status, extra)
 
 
-def _encode_status(status: str) -> bytearray:
-    return bytearray(json.dumps({"status": status}).encode("utf-8"))
+def _encode_status(status: str, **extra) -> bytearray:
+    return bytearray(json.dumps({"status": status, **extra}).encode("utf-8"))
+
+
+def _get_local_ip() -> str:
+    """Return the outbound IP of the Wi-Fi interface by probing a remote address."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        return ""
