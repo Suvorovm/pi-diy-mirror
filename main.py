@@ -11,6 +11,7 @@ from smart_mirror.commands.registry import CommandRegistry
 from smart_mirror.commands.restart_device import RestartDeviceCommand
 from smart_mirror.commands.set_alarm import SetAlarmCommand
 from smart_mirror.commands.set_location import SetLocationCommand
+from smart_mirror.commands.set_phrases import SetPhrasesCommand
 from smart_mirror.core.app import SmartMirrorApp
 from smart_mirror.core.config import Config
 from smart_mirror.core.settings import SettingsManager
@@ -97,6 +98,7 @@ def main() -> None:
     registry.register(SetAlarmCommand)
     registry.register(ClearAlarmCommand)
     registry.register(SetLocationCommand)
+    registry.register(SetPhrasesCommand)
     registry.register(RestartDeviceCommand)
 
     weather_fetcher = WeatherFetcher()
